@@ -6,6 +6,8 @@ ChatBot 是大模型时代最常见的应用形态，可受限于大模型无法
 
 ![](docs/arch.png)
 
+<a href="https://glama.ai/mcp/servers/wdcuqdqtdb"><img width="380" height="200" src="https://glama.ai/mcp/servers/wdcuqdqtdb/badge" alt="ChatBot Enhanced by Bedrock+MCP MCP server" /></a>
+
 该项目目前仍在不断探索完善，MCP 正在整个社区蓬勃发展，欢迎大家一起关注！
 
 ## 1. 依赖安装
