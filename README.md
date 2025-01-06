@@ -1,8 +1,8 @@
 # ChatBot Enhanced by Bedrock+MCP
 
-该项目提供基于 Bedrock 大模型的 ChatBot 交互服务，同时引入 [MCP 机制](https://www.anthropic.com/news/model-context-protocol)，极大增强并延伸 ChatBot 形态产品的应用场景，可支持本地文件系统、数据库、开发工具、互联网检索等无缝接入。如果说包含大模型的 ChatBot 相当于大脑的话，那引入 MCP 后就相当于装上了胳膊腿，真正让大模型动起来、跟各种现存系统和数据联通。
+> ChatBot 是大模型时代最常见的应用形态，但受限于大模型无法获取及时信息、无法操作外部系统等，使得 ChatBot 应用场景相对有限。后来随着 Function Calling/Tool Use 功能推出，大模型能够跟外部系统交互，但弊端在于大模型业务逻辑和 Tool 开发都是紧密耦合的，无法发挥出 Tool 端规模化的效率。Anthropic 2024 年 11 月底推出 [MCP](https://www.anthropic.com/news/model-context-protocol) 打破了这一局面，引入整个社区的力量在 Tool 端规模化发力，目前已经有开源社区、各路厂商等开发了丰富的 [MCP server](https://github.com/modelcontextprotocol/servers)，使得 Tool 端蓬勃发展。终端用户即插即用就可将其集成到自己的 ChatBot 中，极大延展了 ChatBot UI 的能力，有种 ChatBot 一统各种系统 UI 的趋势。
 
-ChatBot 是大模型时代最常见的应用形态，可受限于大模型无法获取及时信息、无法操作外部系统等，使得 ChatBot 应用场景相对有限。后来随着 Function Calling/Tool Use 功能的推出，大模型能够跟外部系统交互，但弊端在于大模型业务逻辑和 Tool 开发都是紧密耦合的，无法发挥出 Tool 端规模化的效率。Anthropic 2024 年 11 月底推出的 MCP 打破了这一局面，引入整个社区的力量在 Tool 端规模化发力，目前已经有开源社区、各路厂商等开发了丰富的 [MCP server](https://github.com/modelcontextprotocol/servers)，使得 Tool 端蓬勃发展。终端用户即插即用就可将其集成到自己的 ChatBot 中，极大延展了 ChatBot UI 的能力，有种 ChatBot 一统各种系统 UI 的趋势。
+本项目提供基于 **Bedrock** 大模型的 ChatBot 交互服务，同时引入 **MCP**，极大增强并延伸 ChatBot 形态产品的应用场景，可支持本地文件系统、数据库、开发工具、互联网检索等无缝接入。如果说包含大模型的 ChatBot 相当于大脑的话，那引入 MCP 后就相当于装上了胳膊腿，真正让大模型动起来、跟各种现存系统和数据联通。
 
 ![](docs/arch.png)
 
@@ -10,7 +10,7 @@ ChatBot 是大模型时代最常见的应用形态，可受限于大模型无法
 
 ## 1. 依赖安装
 
-目前主流 MCP Server 基于 NodeJS 或者 Python 开发实现并运行于用户 PC 上，因此用户需要安装这些依赖。
+目前主流 MCP Server 基于 NodeJS 或者 Python 开发实现并运行于用户 PC 上，因此用户 PC 需要安装这些依赖。
 
 ### NodeJS
 
@@ -18,7 +18,7 @@ NodeJS [下载安装](https://nodejs.org/en)，本项目已对 `v22.12.0` 版本
 
 ### Python
 
-除了有些 MCP Server 基于 Python 开发外，本项目相关代码也基于 Python 开发，因此需要安装环境和依赖。
+有些 MCP Server 基于 Python 开发，因此用户必须安装 [Python](https://www.python.org/downloads/)。此外本项目代码也基于 Python 开发，需要安装环境和依赖。
 
 首先，安装 Python 包管理工具 uv，具体可参考 [uv](https://docs.astral.sh/uv/getting-started/installation/) 官方指南，本项目已对 `v0.5.11` 版本充分测试。
 
@@ -26,7 +26,7 @@ NodeJS [下载安装](https://nodejs.org/en)，本项目已对 `v22.12.0` 版本
 
 ### 环境准备
 
-下载克隆该项目后，进入项目目录中创建 Python 虚拟环境并安装依赖：
+下载克隆该项目后，进入项目目录创建 Python 虚拟环境并安装依赖：
 
 ```
 uv sync
@@ -55,7 +55,7 @@ MCP_SERVICE_PORT=<bedrock-mcp-service-port>
 该项目包含两个服务：
 
 - **Chat 接口服务（Bedrock+MCP）**，可对外提供 Chat 接口、同时托管多个 MCP server、支持历史多轮对话输入、响应内容附加了工具调用中间结果、暂不支持流式响应
-- **ChatBot UI 服务**，跟上述 Chat 接口服务通信，提供多轮对话、MCP 管理的 Web UI 演示服务
+- **ChatBot UI 服务**，跟上述 Chat 接口服务通信，提供多轮对话、管理 MCP 的 Web UI 演示服务
 
 ### Chat 接口服务（Bedrock+MCP）
 
@@ -107,14 +107,12 @@ list all of files in the allowed directory
 read the content of rows.txt file
 ```
 
-![](docs/showcase.png)
-
 ## 4. 添加 MCP Server
 
 当前可以通过两种方式来添加 MCP Server：
 
-1. 内置在 `conf/config.json` 中，每次重新启动 Chat 接口服务就会附带其中配置好的 MCP Server
-2. 通过 ChatBot UI 来添加 MCP Server，通过表单提交 MCP Server 配置参数即可，仅当前生效、服务重启后失效
+1. 预置在 `conf/config.json`，每次重新启动 Chat 接口服务就会加载配置好的 MCP Server
+2. 通过 ChatBot UI 来添加 MCP Server，表单提交 MCP Server 参数即可，仅当前生效、服务重启后失效
 
 下面演示如何通过 ChatBot UI 添加 MCP Server，这里以 Web Search 供应商 [Exa](https://exa.ai/) 为例，开源社区已有针对它的 [MCP Server](https://github.com/exa-labs/exa-mcp-server) 可用。
 
