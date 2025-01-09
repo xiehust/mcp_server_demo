@@ -1,3 +1,4 @@
+#!/bin/bash
 export $(grep -v '^#' .env | xargs)
 
 mkdir -p ${LOG_DIR}

@@ -78,23 +78,17 @@ MCP_SERVICE_PORT=<bedrock-mcp-service-port>
 启动服务：
 
 ```bash
-sh start_mcp.sh
+bash start_all.sh
 ```
 
 待启动后，可查看日志 `logs/start_mcp.log` 确认无报错，然后可运行测试脚本检查 Chat 接口：
 
 ```bash
 # 脚本使用 Bedrock 的 Amazon Nova-lite 模型，也可更换其它
-sh tests/test_chat_api.sh
+bash tests/test_chat_api.sh
 ```
 
 ### ChatBot UI 服务
-
-启动服务：
-
-```
-sh start_chatbot.sh
-```
 
 待启动后，可查看日志 `logs/start_chatbot.log` 确认无报错，然后浏览器打开[服务地址](http://localhost:8502/)，即可体验 MCP 增强后的 Bedrock 大模型 ChatBot 能力。
 
@@ -125,3 +119,8 @@ read the content of rows.txt file
 ![](docs/add_mcp_server.png)
 
 此时在已有 MCP Server 列表中就可以看到新添加项，勾选即可启动该 MCP Server。
+
+## 5. 停止服务
+```bash
+bash stop_all.sh
+```
