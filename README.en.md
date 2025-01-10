@@ -147,3 +147,5 @@ The newly added item will appear in the existing MCP Server list, check it to st
 ```bash
 bash stop_all.sh
 ```
+
+[LICENSE](./LICENSE)
