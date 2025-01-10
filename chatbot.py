@@ -9,7 +9,7 @@ import streamlit as st
 
 logging.basicConfig(level=logging.INFO)
 mcp_base_url = os.environ.get('MCP_BASE_URL')
-mcp_command_list = ["uvx", "npx", "node", "python"]
+mcp_command_list = ["uvx", "npx", "node", "python","docker"]
 
 def request_list_models():
     url = mcp_base_url.rstrip('/') + '/v1/list/models'
@@ -33,7 +33,7 @@ def request_list_mcp_servers():
         logging.error('request list mcp servers error: %s' % e)
     return mcp_servers
 
-def request_add_mcp_server(server_id, server_name, command, args=[], env={}):
+def request_add_mcp_server( server_id, server_name, command, args=[], env={},config_json={}):
     url = mcp_base_url.rstrip('/') + '/v1/add/mcp_server'
     status = False
     try:
@@ -42,7 +42,8 @@ def request_add_mcp_server(server_id, server_name, command, args=[], env={}):
             "server_desc": server_name,
             "command": command,
             "args": args,
-            "env": env
+            "env": env,
+            "config_json":config_json
         }
         response = requests.post(url, json=payload)
         data = response.json()
@@ -97,19 +98,39 @@ def add_new_mcp_server_handle():
     server_cmd = st.session_state.new_mcp_server_cmd
     server_args = st.session_state.new_mcp_server_args
     server_env = st.session_state.new_mcp_server_env
+    server_config_json = st.session_state.new_mcp_server_json_config
+    config_json = {}
     if not server_name:
         status, msg = False, "The server name is empty!"
     elif server_name in st.session_state.mcp_servers:
         status, msg = False, "The server name exists, try another name!"
-    elif not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', server_id):
+
+    # 如果server_config_json配置，则已server_config_json为准
+    if server_config_json:
+        try:
+            config_json = json.loads(server_config_json)
+            if not all([isinstance(k, str) for k in config_json.keys()]):
+                raise ValueError("env key must be str.")
+            if "mcpServers" in config_json:
+                config_json = config_json["mcpServers"]
+            #直接使用json配置里的id
+            logging.info(f'add new mcp server: {config_json}')
+            server_id = list(config_json.keys())[0]
+            server_cmd = config_json[server_id]["command"]
+            server_args = config_json[server_id]["args"]
+            server_env = config_json[server_id]["env"]
+        except Exception as e:
+            status, msg = False, "The config must be a valid JSON."
+
+    if  not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', server_id):
         status, msg = False, "The server id must be a valid variable name!"
     elif server_id in st.session_state.mcp_servers.values():
         status, msg = False, "The server id exists, try another one!"
     elif not server_cmd or server_cmd not in mcp_command_list:
         status, msg = False, "The server command is invalid!"
-    elif server_env:
+    if server_env:
         try:
-            server_env = json.loads(server_env)
+            server_env = json.loads(server_env) if not isinstance(server_env, dict) else server_env
             if not all([isinstance(k, str) for k in server_env.keys()]):
                 raise ValueError("env key must be str.")
             if not all([isinstance(v, str) for v in server_env.values()]):
@@ -117,15 +138,14 @@ def add_new_mcp_server_handle():
         except Exception as e:
             server_env = {}
             status, msg = False, "The server env must be a JSON dict[str, str]."
-
-    if not server_env:
-        server_env = {}
-    if server_args:
+    if isinstance(server_args,str):
         server_args = [x.strip() for x in server_args.split(' ') if x.strip()]
 
+    logging.info(f'add new mcp server: {server_id} :{server_name}')
+    
     with st.spinner('Add the server...'):
         status, msg = request_add_mcp_server(server_id, server_name, server_cmd, 
-                                             args=server_args, env=server_env)
+                                             args=server_args, env=server_env,config_json = config_json)
     if status:
         st.session_state.mcp_servers[server_name] = server_id
 
@@ -150,22 +170,31 @@ def add_new_mcp_server():
                 st.session_state.new_mcp_server_name = ""
                 st.session_state.new_mcp_server_args = ""
                 st.session_state.new_mcp_server_env = ""
+                st.session_state.new_mcp_server_json_config = ""
             else:
                 if st.session_state.new_mcp_server_fd_msg:
                     st.error(st.session_state.new_mcp_server_fd_msg, icon="🚨")
 
-        new_mcp_server_id = st.text_input("Server ID", 
-                                          value="", placeholder="dev_git", key="new_mcp_server_id")
         new_mcp_server_name = st.text_input("Server Name", 
-                                            value="", placeholder="Git", key="new_mcp_server_name")
-        new_mcp_server_cmd = st.selectbox("运行命令", 
-                                          mcp_command_list, key="new_mcp_server_cmd")
-        new_mcp_server_args = st.text_area("运行参数", 
-                                           value="", key="new_mcp_server_args",
-                                           placeholder="mcp-server-git --repository path/to/git/repo")
-        new_mcp_server_env = st.text_area("环境变量", 
-                                          value="", key="new_mcp_server_env",
-                                          placeholder="需要提供一个有效的JSON字典")
+                                            value="", placeholder="Name description of server", key="new_mcp_server_name")
+        
+        new_mcp_server_config_json = st.text_area("使用JSON配置", 
+                                    height = 128,
+                                    value="", key="new_mcp_server_json_config",
+                                    placeholder="需要提供一个有效的JSON字典")
+        with st.expander(label='输入字段配置', expanded=False):
+            new_mcp_server_id = st.text_input("Server ID", 
+                                            value="", placeholder="server id", key="new_mcp_server_id")
+
+            new_mcp_server_cmd = st.selectbox("运行命令", 
+                                            mcp_command_list, key="new_mcp_server_cmd")
+            new_mcp_server_args = st.text_area("运行参数", 
+                                            value="", key="new_mcp_server_args",
+                                            placeholder="mcp-server-git --repository path/to/git/repo")
+            new_mcp_server_env = st.text_area("环境变量", 
+                                            value="", key="new_mcp_server_env",
+                                            placeholder="需要提供一个有效的JSON字典")
+
         submitted = st.form_submit_button("添加", 
                                           on_click=add_new_mcp_server_handle,
                                           disabled=False)
@@ -175,10 +204,10 @@ def add_new_mcp_server():
 #    st.rerun()
 
 with st.sidebar:
-    llm_model_name = st.selectbox('Bedrock 大模型', 
+    llm_model_name = st.selectbox('Bedrock模型', 
                                   list(st.session_state.model_names.keys()))
     max_tokens = st.number_input('上下文长度限制', 
-                                 min_value=64, max_value=32000, value=1024)
+                                 min_value=64, max_value=8000, value=1024)
     with st.expander(label='已有 MCP Servers', expanded=False):
         for i, server_name in enumerate(st.session_state.mcp_servers):
             st.checkbox(label=server_name, value=True, key=f'mcp_server_{server_name}')
@@ -209,7 +238,7 @@ if prompt := st.chat_input():
     tool_msg = ""
     if True or st.session_state.enable_mcp_result == 'Y':
         if msg_extras.get('tool_use', []):
-            tool_msg = f"```\n{json.dumps(msg_extras.get('tool_use', []), indent=4)}\n```"
+            tool_msg = f"```\n{json.dumps(msg_extras.get('tool_use', []), indent=4,ensure_ascii=False)}\n```"
 
     st.session_state.messages.append({"role": "assistant", "content": msg})
 

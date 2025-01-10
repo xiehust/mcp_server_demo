@@ -1,38 +1,40 @@
 {
-    "models": [{
-	"model_id": "amazon.nova-lite-v1:0",
-	"model_name": "Amazon Nova Lite v1"
-    }, {
-	"model_id": "amazon.nova-pro-v1:0",
-	"model_name": "Amazon Nova Pro v1"
-    }, {
-	"model_id": "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-	"model_name": "Claude 3.5 Sonnet v1"
-    }, {
-	"model_id": "amazon.nova-micro-v1:0",
-	"model_name": "Amazon Nova Micro v1"
-    }],
-    "mcpServers": {
-	"aws_kb_retrieval": {
-	    "command": "node",
-	    "args": ["/home/ec2-user/mcp_demo/mcp-servers/aws-kb-retrieval-server/dist/index.js"],
-	    "env": {},
-	    "description": "AWS Knowledge Base Retrieval",
-	    "status": 0
-	},
-	"local_fs": {
-	    "command": "npx",
-	    "args": ["-y", "@modelcontextprotocol/server-filesystem", "./docs"],
-	    "env": {},
-	    "description": "Local File System I/O",
-	    "status": 1
-	},
-	"db_sqlite": {
-	    "command": "uvx",
-	    "args": ["mcp-server-sqlite", "--db-path", "./docs/test.db"],
-	    "env": {},
-	    "description": "DB Sqlite CRUD",
-	    "status": 1
+	"models": [
+		{
+			"model_id": "amazon.nova-pro-v1:0",
+			"model_name": "Amazon Nova Pro v1"
+		},
+		{
+			"model_id": "amazon.nova-lite-v1:0",
+			"model_name": "Amazon Nova Lite v1"
+		},
+		{
+			"model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+			"model_name": "Claude 3.5 Sonnet v2"
+		}
+	],
+	"mcpServers": {
+		"local_fs": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"@modelcontextprotocol/server-filesystem",
+				"./docs"
+			],
+			"env": {},
+			"description": "Local File System I/O",
+			"status": 1
+		},
+		"db_sqlite": {
+			"command": "uvx",
+			"args": [
+				"mcp-server-sqlite",
+				"--db-path",
+				"./docs/test.db"
+			],
+			"env": {},
+			"description": "DB Sqlite CRUD",
+			"status": 1
+		}
 	}
-    }
 }

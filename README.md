@@ -1,8 +1,8 @@
-# ChatBot Enhanced by Bedrock+MCP
+# Amazon Nova MCP [[English Readme](./README.en.md)]
 
 > ChatBot 是大模型时代最常见的应用形态，但受限于大模型无法获取及时信息、无法操作外部系统等，使得 ChatBot 应用场景相对有限。后来随着 Function Calling/Tool Use 功能推出，大模型能够跟外部系统交互，但弊端在于大模型业务逻辑和 Tool 开发都是紧密耦合的，无法发挥出 Tool 端规模化的效率。Anthropic 2024 年 11 月底推出 [MCP](https://www.anthropic.com/news/model-context-protocol) 打破了这一局面，引入整个社区的力量在 Tool 端规模化发力，目前已经有开源社区、各路厂商等开发了丰富的 [MCP server](https://github.com/modelcontextprotocol/servers)，使得 Tool 端蓬勃发展。终端用户即插即用就可将其集成到自己的 ChatBot 中，极大延展了 ChatBot UI 的能力，有种 ChatBot 一统各种系统 UI 的趋势。
 
-本项目提供基于 **Bedrock** 大模型的 ChatBot 交互服务，同时引入 **MCP**，极大增强并延伸 ChatBot 形态产品的应用场景，可支持本地文件系统、数据库、开发工具、互联网检索等无缝接入。如果说包含大模型的 ChatBot 相当于大脑的话，那引入 MCP 后就相当于装上了胳膊腿，真正让大模型动起来、跟各种现存系统和数据联通。
+本项目提供基于 **Bedrock** 中Nova,Claude等大模型的 ChatBot 交互服务，同时引入 **MCP**，极大增强并延伸 ChatBot 形态产品的应用场景，可支持本地文件系统、数据库、开发工具、互联网检索等无缝接入。如果说包含大模型的 ChatBot 相当于大脑的话，那引入 MCP 后就相当于装上了胳膊腿，真正让大模型动起来、跟各种现存系统和数据联通。
 
 ![](docs/arch.png)
 
@@ -27,12 +27,14 @@ NodeJS [下载安装](https://nodejs.org/en)，本项目已对 `v22.12.0` 版本
 ### 环境准备
 
 下载克隆该项目后，进入项目目录创建 Python 虚拟环境并安装依赖：
-
-```
+```bas
 uv sync
 ```
 
-此时项目目录的 `.venv` 中就创建好了虚拟环境。
+此时项目目录的 `.venv` 中就创建好了虚拟环境,激活
+```
+source .venv/bin/activate
+```
 
 ### 配置编辑
 
@@ -76,23 +78,17 @@ MCP_SERVICE_PORT=<bedrock-mcp-service-port>
 启动服务：
 
 ```bash
-sh start_mcp.sh
+bash start_all.sh
 ```
 
 待启动后，可查看日志 `logs/start_mcp.log` 确认无报错，然后可运行测试脚本检查 Chat 接口：
 
 ```bash
 # 脚本使用 Bedrock 的 Amazon Nova-lite 模型，也可更换其它
-sh tests/test_chat_api.sh
+bash tests/test_chat_api.sh
 ```
 
 ### ChatBot UI 服务
-
-启动服务：
-
-```
-sh start_chatbot.sh
-```
 
 待启动后，可查看日志 `logs/start_chatbot.log` 确认无报错，然后浏览器打开[服务地址](http://localhost:8502/)，即可体验 MCP 增强后的 Bedrock 大模型 ChatBot 能力。
 
@@ -119,7 +115,27 @@ read the content of rows.txt file
 首先，前往 [Exa](https://exa.ai/) 官网注册账号，并获取 API Key。
 
 然后点击【添加 MCP Server】，在弹出菜单中填写如下参数并提交即可：
-
-![](docs/add_mcp_server.png)
+- 方式1，直接添加MCP json 配置文件(与Anthropic官方格式相同)
+![](docs/add_mcp_server2.png)  
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "command": "npx",
+      "args": ["-y","exa-mcp-server"],
+      "env": {
+        "EXA_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+- 方式2，按字段添加 
+![](docs/add_mcp_server.png)  
 
 此时在已有 MCP Server 列表中就可以看到新添加项，勾选即可启动该 MCP Server。
+
+## 5. 停止服务
+```bash
+bash stop_all.sh
+```
