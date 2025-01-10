@@ -8,6 +8,12 @@ This project provides ChatBot interaction services based on **Bedrock** large mo
 
 This project is still being continuously explored and improved, and MCP is flourishing in the entire community. Everyone is welcome to follow along!
 
+## Project Features:
+- Simultaneously supports Amazon Nova Pro and Claude Sonnet3.5 models
+- Fully compatible with Anthropic's official MCP standard, allowing direct use of various community [MCP servers](https://github.com/modelcontextprotocol/servers/tree/main) in the same way
+- Decouples MCP capabilities from the client, encapsulates MCP functionality on the server side, provides external API services, and maintains OpenAI-compatible chat API for easy integration with other chat clients
+![alt text](./docs/image_api.png)
+
 ## 1. Dependencies Installation
 
 Currently, mainstream MCP Servers are developed and run on users' PCs using NodeJS or Python, so these dependencies need to be installed on the user's PC.
@@ -56,7 +62,10 @@ Note: This project uses **AWS Bedrock Nova** series models, so you need to regis
 
 This project includes two services:
 
-- **Chat Interface Service (Bedrock+MCP)**: Provides Chat API, hosts multiple MCP servers, supports multi-turn conversation history input, includes tool call intermediate results in responses, currently doesn't support streaming responses
+- **Chat Interface Service (Bedrock+MCP)**: Provides Chat API, hosts multiple MCP servers, supports multi-turn conversation history input, includes tool call intermediate results in responses, currently doesn't support streaming responses.  
+- The interface service can provide independent APIs to external clients, allowing other chat clients to connect and achieve decoupling between server-side MCP capabilities and client-side functions
+- API documentation can be viewed at http://{ip}:7002/docs#/
+![alt text](./docs/image_api.png)
 - **ChatBot UI Service**: Communicates with the above Chat interface service, provides multi-turn conversation and MCP management Web UI demo service
 
 ### Chat Interface Service (Bedrock+MCP)
