@@ -97,6 +97,36 @@ bash start_all.sh
 bash tests/test_chat_api.sh
 ```
 
+- Demo 示例1: 使用Amazon Knowledge Base
+先在Bedrock console中创建或者使用已有的Bedrock，记下Knowledge Base Id  
+Clone [AWS Knowledge Base Retrieval MCP Server](https://github.com/modelcontextprotocol/servers)到本地，并用[docs/aws-kb-retrieval-server/index.ts)](docs/aws-kb-retrieval-server/index.ts)下的问题替换 `src/aws-kb-retrieval-server/index.ts`里的文件。  
+> 新文件把knowledgeBaseId通过环境变量指定，无须在通过对话传入。  
+
+在新clone的servers目录下用如下命令打包  
+```sh
+docker build -t mcp/aws-kb-retrieval:latest -f src/aws-kb-retrieval-server/Dockerfile . 
+```
+
+然后在chatbot界面上添加这个json文件，注意env中的字段需要替换成自己的账号信息，以及Knowledge Base Id   
+```json
+{
+  "mcpServers": {
+    "aws-kb-retrieval": {
+      "command": "docker",
+      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "-e", "knowledgeBaseId", "mcp/aws-kb-retrieval-server:latest" ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_HERE",
+        "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY_HERE",
+        "AWS_REGION": "YOUR_AWS_REGION_HERE",
+        "knowledgeBaseId":"The knowledage base id"
+      }
+    }
+  }
+}
+```
+
+
+
 ### ChatBot UI 服务
 
 待启动后，可查看日志 `logs/start_chatbot.log` 确认无报错，然后浏览器打开[服务地址](http://localhost:8502/)，即可体验 MCP 增强后的 Bedrock 大模型 ChatBot 能力。
@@ -143,6 +173,7 @@ read the content of rows.txt file
 ![](docs/add_mcp_server.png)  
 
 此时在已有 MCP Server 列表中就可以看到新添加项，勾选即可启动该 MCP Server。
+
 
 ## 5. 停止服务
 ```bash
