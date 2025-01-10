@@ -1,7 +1,6 @@
 #!/bin/bash
 export $(grep -v '^#' .env | xargs)
 export PYTHONPATH=./src:$PYTHONPATH
-
 source .venv/bin/activate
 
 # Create necessary directories
@@ -10,10 +9,7 @@ mkdir -p ${LOG_DIR}
 
 # Set environment variables
 export MCP_BASE_URL=http://${MCP_SERVICE_HOST}:${MCP_SERVICE_PORT}
-
-# Kill existing processes on ports if any
-lsof -t -i:${MCP_SERVICE_PORT} | xargs kill -9 2> /dev/null
-lsof -t -i:${CHATBOT_SERVICE_PORT} | xargs kill -9 2> /dev/null
+echo "MCP_BASE_URL: ${MCP_BASE_URL}"
 
 # Start MCP service
 echo "Starting MCP service..."

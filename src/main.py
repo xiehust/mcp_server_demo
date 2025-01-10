@@ -18,7 +18,7 @@ from fastapi.security.api_key import APIKeyHeader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Security
 from pydantic import BaseModel, Field
-
+from fastapi.exceptions import RequestValidationError
 from mcp_client import MCPClient
 from chat_client import ChatClient
 
@@ -68,17 +68,27 @@ class ChatResponse(BaseModel):
     usage: Dict[str, int]
 
 class AddMCPServerRequest(BaseModel):
-    server_id: str
+    server_id: str = ''
     server_desc: str
-    command: Literal["npx", "uvx", "node", "python"]
+    command: Literal["npx", "uvx", "node", "python","docker"] = Field(default='npx')
     args: List[str] = []
     env: Dict[str, str] = Field(default_factory=dict)
+    config_json: Dict[str,Any] = Field(default_factory=dict)
+    
 
 class AddMCPServerResponse(BaseModel):
     errno: int
     msg: str = "ok"
     data: Dict[str, Any] = Field(default_factory=dict)
 
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.error(f"Validation error: {exc}")
+    return JSONResponse(content=AddMCPServerResponse(
+                errno=422,
+                msg=str(exc.errors())
+            ).model_dump())
 
 @app.get("/v1/list/models")
 async def list_models(request: Request):
@@ -100,34 +110,55 @@ async def add_mcp_server(request: Request,
         return JSONResponse(content=AddMCPServerResponse(
             errno=-1,
             msg="MCP server id exists!"
-        ).dict())
+        ).model_dump())
     
+    server_id=data.server_id
+    server_cmd=data.command
+    server_script_args=data.args
+    server_script_envs=data.env
+    server_desc = data.server_desc
+    # if config_json is not empty, use it to update config
+    if data.config_json:
+        config_json = data.config_json
+        if not all([isinstance(k, str) for k in config_json.keys()]):
+            return JSONResponse(content=AddMCPServerResponse(
+                errno=-1,
+                msg="env key must be str!"
+            ).model_dump())
+        if "mcpServers" in config_json:
+            config_json = config_json["mcpServers"]
+        #直接使用json配置里的id
+        logging.info(f'add new mcp server: {config_json}')
+        server_id = list(config_json.keys())[0]
+        server_cmd = config_json[server_id]["command"]
+        server_script_args = config_json[server_id]["args"]
+        server_script_envs = config_json[server_id]["env"]
     # connect mcp server
     try:
         await mcp_client.connect_to_server(
-            server_id=data.server_id,
-            command=data.command,
-            server_script_args=data.args,
-            server_script_envs=data.env
+            server_id=server_id,
+            command=server_cmd,
+            server_script_args=server_script_args,
+            server_script_envs=server_script_envs
         )
-        tool_conf = await mcp_client.get_tool_config(server_ids=[data.server_id])
-        logger.info(f"Connected MCP server {data.server_id}, tools={tool_conf}")
+        tool_conf = await mcp_client.get_tool_config(server_ids=[server_id])
+        logger.info(f"Connected MCP server {server_id}, tools={tool_conf}")
     except Exception as e:
         tool_conf = {}
-        logger.error(f"Connect MCP server {data.server_id} error: {e}")
+        logger.error(f"Connect MCP server {server_id} error: {e}")
         return JSONResponse(content=AddMCPServerResponse(
             errno=-1,
             msg="MCP server connect failed!"
-        ).dict())
+        ).model_dump())
 
     # add to server list
-    mcp_server_list[data.server_id] = data.server_desc
+    mcp_server_list[server_id] = server_desc
     
     return JSONResponse(content=AddMCPServerResponse(
         errno=0,
         msg="The server already been added!",
         data={"tools": tool_conf.get("tools", {}) if tool_conf else {}}
-    ).dict())
+    ).model_dump())
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request, 
