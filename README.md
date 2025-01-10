@@ -148,3 +148,6 @@ read the content of rows.txt file
 ```bash
 bash stop_all.sh
 ```
+
+
+[LICENSE](./LICENSE)
