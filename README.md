@@ -8,6 +8,12 @@
 
 该项目目前仍在不断探索完善，MCP 正在整个社区蓬勃发展，欢迎大家一起关注！
 
+## 项目特点：
+- 同时支持Amazon Nova Pro和Claude Sonnet3.5模型
+- 与Anthropic官方MCP标准完全兼容，可以采用同样的方式，直接使用社区的各种[MCP servers](https://github.com/modelcontextprotocol/servers/tree/main)
+- 将MCP能力和客户端的解耦，MCP能力封装在服务端，对外提供API服务，且chat接口兼容openai，方便接入其他chat客户端
+![alt text](./docs/image_api.png)
+
 ## 1. 依赖安装
 
 目前主流 MCP Server 基于 NodeJS 或者 Python 开发实现并运行于用户 PC 上，因此用户 PC 需要安装这些依赖。
@@ -60,6 +66,9 @@ MCP_SERVICE_PORT=<bedrock-mcp-service-port>
 - **ChatBot UI 服务**，跟上述 Chat 接口服务通信，提供多轮对话、管理 MCP 的 Web UI 演示服务
 
 ### Chat 接口服务（Bedrock+MCP）
+- 接口服务可以对外提供给独立API，接入其他chat客户端, 实现服务端MCP能力和客户端的解耦
+- 可以通过http://{ip}:7002/docs#/查看接口文档.
+![alt text](./docs/image_api.png)
 
 编辑配置文件 `conf/config.json`，该文件预设了要启动哪些 MCP server，可以编辑来添加或者修改 MCP server 参数。
 
