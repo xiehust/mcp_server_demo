@@ -99,8 +99,8 @@ bash tests/test_chat_api.sh
 
 - Demo 示例1: 使用Amazon Knowledge Base
 先在Bedrock console中创建或者使用已有的Bedrock，记下Knowledge Base Id  
-Clone [AWS Knowledge Base Retrieval MCP Server](https://github.com/modelcontextprotocol/servers)到本地，并用[docs/aws-kb-retrieval-server/index.ts)](docs/aws-kb-retrieval-server/index.ts)下的问题替换 `src/aws-kb-retrieval-server/index.ts`里的文件。  
-> 新文件把knowledgeBaseId通过环境变量指定，无须在通过对话传入。  
+Clone [AWS Knowledge Base Retrieval MCP Server](https://github.com/modelcontextprotocol/servers)到本地，并用[docs/aws-kb-retrieval-server/index.ts)](docs/aws-kb-retrieval-server/index.ts)下的文件替换 `src/aws-kb-retrieval-server/index.ts`里的文件。  
+> 新文件把knowledgeBaseId通过环境变量指定，无须再通过对话传入。  
 
 在新clone的servers目录下用如下命令打包  
 ```sh
