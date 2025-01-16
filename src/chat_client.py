@@ -3,6 +3,7 @@ Bedrock Chat Wrapper
 """
 import os
 import sys
+import json
 import asyncio
 import logging
 from typing import Dict
@@ -42,6 +43,123 @@ class ChatClient:
         )
 
         return bedrock_client
+
+    async def process_stream(self, response):
+        """Process streaming response from Bedrock."""
+        message = {}
+        content = []
+        message['content'] = content
+        text = ''
+        tool_use = {}
+
+        for chunk in response['stream']:
+            if 'messageStart' in chunk:
+                message['role'] = chunk['messageStart']['role']
+            elif 'contentBlockStart' in chunk:
+                tool = chunk['contentBlockStart']['start']['toolUse']
+                tool_use['toolUseId'] = tool['toolUseId']
+                tool_use['name'] = tool['name']
+            elif 'contentBlockDelta' in chunk:
+                delta = chunk['contentBlockDelta']['delta']
+                if 'toolUse' in delta:
+                    if 'input' not in tool_use:
+                        tool_use['input'] = ''
+                    tool_use['input'] += delta['toolUse']['input']
+                elif 'text' in delta:
+                    text += delta['text']
+                    yield {'type': 'text', 'content': delta['text']}
+            elif 'contentBlockStop' in chunk:
+                if 'input' in tool_use:
+                    tool_use['input'] = json.loads(tool_use['input'])
+                    content.append({'toolUse': tool_use})
+                    yield {'type': 'tool_use', 'content': tool_use}
+                    tool_use = {}
+                else:
+                    content.append({'text': text})
+                    text = ''
+            elif 'messageStop' in chunk:
+                message['stop_reason'] = chunk['messageStop']['stopReason']
+                yield {'type': 'stop', 'content': message['stop_reason']}
+
+    async def process_query_stream(self, query: str = "",
+            model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=3,
+            history=[], mcp_client=None, mcp_server_ids=[]):
+        """Submit user query or history messages with streaming response.
+        
+        Note the specified mcp servers' tool maybe used.
+        """
+        if query:
+            history.append({
+                    "role": "user",
+                    "content": [{"text": query}]
+            })
+        messages = history
+
+        # get tools from mcp server
+        tool_config = None
+        if mcp_client is not None:
+            tool_config = await mcp_client.get_tool_config(server_ids=mcp_server_ids)
+
+        bedrock_client = self._get_bedrock_client()
+
+        # invoke bedrock llm with user query
+        if tool_config:
+            response = bedrock_client.converse_stream(
+                modelId=model_id,
+                messages=messages,
+                toolConfig=tool_config
+            )
+        else:
+            response = bedrock_client.converse_stream(
+                modelId=model_id,
+                messages=messages,
+            )
+
+        async for chunk in self.process_stream(response):
+            if chunk['type'] == 'tool_use':
+                # Handle tool use
+                tool = chunk['content']
+                try:
+                    tool_name, tool_args = tool['name'], tool['input']
+                    result = await mcp_client.call_tool(tool_name, tool_args)
+                    result_content = [{"text": "\n".join([x.text for x in result.content if x.type == 'text'])}]
+                    tool_result = {
+                        "toolUseId": tool['toolUseId'],
+                        "content": result_content
+                    }
+                except Exception as err:
+                    err_msg = f"{tool['name']} tool call failed."
+                    tool_result = {
+                        "toolUseId": tool['toolUseId'],
+                        "content": [{"text": err_msg}],
+                        "status": 'error'
+                    }
+
+                # Add tool result to messages and continue streaming
+                tool_result_message = {
+                    "role": "user",
+                    "content": [{"toolResult": tool_result}]
+                }
+                messages.append(tool_result_message)
+                yield {'type': 'tool_result', 'content': tool_result}
+
+                # Continue conversation with tool result
+                if tool_config:
+                    response = bedrock_client.converse_stream(
+                        modelId=model_id,
+                        messages=messages,
+                        toolConfig=tool_config
+                    )
+                else:
+                    response = bedrock_client.converse_stream(
+                        modelId=model_id,
+                        messages=messages,
+                    )
+                
+                async for new_chunk in self.process_stream(response):
+                    yield new_chunk
+            else:
+                yield chunk
     
     async def process_query(self, query: str = "", 
             model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=3,

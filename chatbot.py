@@ -63,6 +63,7 @@ def request_chat(messages, model_id, mcp_server_ids, max_tokens=1024):
             'model': model_id,
             'mcp_server_ids': mcp_server_ids,
             'max_tokens': max_tokens,
+            'stream': True
         }
         logging.info('request payload: %s' % payload)
         response = requests.post(url, json=payload)

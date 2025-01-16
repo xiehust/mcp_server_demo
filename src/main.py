@@ -161,8 +161,8 @@ async def add_mcp_server(request: Request,
     ).model_dump())
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: Request, 
-        data: ChatCompletionRequest, 
+async def chat_completions(request: Request,
+        data: ChatCompletionRequest,
         background_tasks: BackgroundTasks,
         #auth: HTTPAuthorizationCredentials = Security(security)
         ):
@@ -175,7 +175,7 @@ async def chat_completions(request: Request,
             message=Message(role="assistant", content=""),
             done=True,
             done_reason="load"
-        ).dict())
+        ).model_dump())
 
     messages = [{
         "role": x.role,
@@ -188,77 +188,109 @@ async def chat_completions(request: Request,
 
     logger.info(f"request body: {messages}")
 
-    try:
-        tool_use_info = {}
-        async for response in chat_client.process_query(
-                model_id=data.model,
-                max_tokens=data.max_tokens,
-                history=messages,
-                mcp_client=mcp_client,
-                mcp_server_ids=data.mcp_server_ids,
-                ):
-            logger.info(f"response body: {response}")
-            is_tool_use = any([bool(x.get('toolUse')) for x in response['content']])
-            is_tool_result = any([bool(x.get('toolResult')) for x in response['content']])
-            is_answer = any([bool(x.get('text')) for x in response['content']])
+    async def generate_stream():
+        try:
+            tool_use_info = {}
+            if data.stream:
+                async for chunk in chat_client.process_query_stream(
+                        model_id=data.model,
+                        max_tokens=data.max_tokens,
+                        history=messages,
+                        mcp_client=mcp_client,
+                        mcp_server_ids=data.mcp_server_ids,
+                        ):
+                    if chunk['type'] == 'text':
+                        yield f"data: {json.dumps({'delta': {'content': chunk['content']}, 'finish_reason': None})}\n\n"
+                    elif chunk['type'] == 'tool_use':
+                        tool_id = chunk['content'].get('toolUseId')
+                        if tool_id:
+                            tool_use_info[tool_id] = {
+                                'name': chunk['content']['name'],
+                                'arguments': chunk['content']['input']
+                            }
+                    elif chunk['type'] == 'tool_result':
+                        tool_id = chunk['content'].get('toolUseId')
+                        if tool_id and tool_id in tool_use_info:
+                            tool_use_info[tool_id]['result'] = chunk['content']['content'][0]['text']
+                    elif chunk['type'] == 'stop':
+                        yield f"data: {json.dumps({'finish_reason': 'stop'})}\n\n"
+                        yield "data: [DONE]\n\n"
+            else:
+                async for response in chat_client.process_query(
+                        model_id=data.model,
+                        max_tokens=data.max_tokens,
+                        history=messages,
+                        mcp_client=mcp_client,
+                        mcp_server_ids=data.mcp_server_ids,
+                        ):
+                    logger.info(f"response body: {response}")
+                    is_tool_use = any([bool(x.get('toolUse')) for x in response['content']])
+                    is_tool_result = any([bool(x.get('toolResult')) for x in response['content']])
+                    is_answer = any([bool(x.get('text')) for x in response['content']])
 
-            if is_tool_use:
-                for x in response['content']:
-                    if 'toolUse' not in x or not x['toolUse'].get('name'):
+                    if is_tool_use:
+                        for x in response['content']:
+                            if 'toolUse' not in x or not x['toolUse'].get('name'):
+                                continue
+                            tool_id = x['toolUse'].get('toolUseId')
+                            if not tool_id:
+                                continue
+                            if tool_id not in tool_use_info:
+                                tool_use_info[tool_id] = {}
+                            tool_use_info[tool_id]['name'] = x['toolUse']['name']
+                            tool_use_info[tool_id]['arguments'] = x['toolUse']['input']
+
+                    if is_tool_result:
+                        for x in response['content']:
+                            if 'toolResult' not in x:
+                                continue
+                            tool_id = x['toolResult'].get('toolUseId')
+                            if not tool_id:
+                                continue
+                            if tool_id not in tool_use_info:
+                                tool_use_info[tool_id] = {}
+                            tool_use_info[tool_id]['result'] = x['toolResult']['content'][0]['text']
+
+                    if is_tool_use or is_tool_result:
                         continue
-                    tool_id = x['toolUse'].get('toolUseId')
-                    if not tool_id:
-                        continue
-                    if tool_id not in tool_use_info:
-                        tool_use_info[tool_id] = {}
-                    tool_use_info[tool_id]['name'] = x['toolUse']['name']
-                    tool_use_info[tool_id]['arguments'] = x['toolUse']['input']
 
-            if is_tool_result:
-                for x in response['content']:
-                    if 'toolResult' not in x:
-                        continue
-                    tool_id = x['toolResult'].get('toolUseId')
-                    if not tool_id:
-                        continue
-                    if tool_id not in tool_use_info:
-                        tool_use_info[tool_id] = {}
-                    tool_use_info[tool_id]['result'] = x['toolResult']['content'][0]['text']
+                    chat_response = ChatResponse(
+                        id=f"chat{time.time_ns()}",
+                        created=int(time.time()),
+                        model=data.model,
+                        choices=[
+                            {
+                                "index": 0,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": response['content'][0]['text'],
+                                },
+                                "message_extras": {
+                                    "tool_use": [info for too_id, info in tool_use_info.items()],
+                                },
+                                "logprobs": None,
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        usage={
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "total_tokens": 0,
+                        }
+                    )
+                    
+                    yield JSONResponse(content=chat_response.model_dump())
+        except Exception as e:
+            logger.error(str(e))
+            raise HTTPException(status_code=500, detail=str(e))
 
-            if is_tool_use or is_tool_result:
-                continue
-
-            #logger.info(tool_use_info)
-
-            chat_response = ChatResponse(
-                id=f"chat{time.time_ns()}",
-                created=int(time.time()),
-                model=data.model,
-                choices=[
-                    {
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": response['content'][0]['text'],
-                        },
-                        "message_extras": {
-                            "tool_use": [info for too_id, info in tool_use_info.items()],
-                        },
-                        "logprobs": None,  
-                        "finish_reason": "stop", 
-                    }
-                ],
-                usage={
-                    "prompt_tokens": 0, 
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                }
-            )
-            
-            return JSONResponse(content=chat_response.dict())
-    except Exception as e:
-        logger.error(str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+    if data.stream:
+        return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    else:
+        async for response in generate_stream():
+            if isinstance(response, JSONResponse):
+                return response
+        return JSONResponse(content={"error": "No response generated"})
 
 
 if __name__ == '__main__':
