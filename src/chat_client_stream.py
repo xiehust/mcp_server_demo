@@ -57,7 +57,7 @@ class ChatClientStream(ChatClient):
 
     async def process_query_stream(self, query: str = "",
             model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=10,temperature=0.1,
-            history=[], mcp_client=None, mcp_server_ids=[]) -> AsyncGenerator[Dict, None]:
+            history=[], system=[],mcp_client=None, mcp_server_ids=[]) -> AsyncGenerator[Dict, None]:
         """Submit user query or history messages, and get streaming response.
         
         Similar to process_query but uses converse_stream API for streaming responses.
@@ -90,6 +90,7 @@ class ChatClientStream(ChatClient):
                 response = bedrock_client.converse_stream(
                     modelId=model_id,
                     messages=messages,
+                    system=system,
                     toolConfig=tool_config if tool_config else None,
                     inferenceConfig={"maxTokens":max_tokens,"temperature":temperature,}
                     

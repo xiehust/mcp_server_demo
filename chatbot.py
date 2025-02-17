@@ -148,8 +148,13 @@ if not 'mcp_servers' in st.session_state:
 for x in request_list_mcp_servers():
     st.session_state.mcp_servers[x['server_name']] = x['server_id']
 
+if "system_prompt" not in st.session_state:
+    st.session_state.system_prompt = "You are a helpful AI assistant."
+
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "How can I help you?"}]
+    st.session_state.messages = [
+        {"role": "system", "content": st.session_state.system_prompt},
+    ]
 
 if "enable_stream" not in st.session_state:
     st.session_state.enable_stream = True
@@ -272,6 +277,11 @@ with st.sidebar:
                                  min_value=64, max_value=8000, value=4000)
     temperature = st.number_input('temperature',
                                  min_value=0.0, max_value=1.0, value=0.1, step=0.01)
+    system_prompt = st.text_area('系统提示词',
+                                value=st.session_state.system_prompt,
+                                height=100,
+                                help="系统提示词")
+    st.session_state.system_prompt = system_prompt
     st.session_state.enable_stream = st.toggle('流式输出', value=True)
     with st.expander(label='已有 MCP Servers', expanded=False):
         for i, server_name in enumerate(st.session_state.mcp_servers):
@@ -287,6 +297,9 @@ for msg in st.session_state.messages:
 
 # Handle user input
 if prompt := st.chat_input():
+    # 更新system message
+    st.session_state.messages[0] = {"role": "system", "content": st.session_state.system_prompt}
+    
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 

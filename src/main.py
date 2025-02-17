@@ -180,6 +180,10 @@ async def stream_chat_response(data: ChatCompletionRequest) -> AsyncGenerator[st
         "role": x.role,
         "content": [{"text": x.content}],
     } for x in data.messages]
+    system = []
+    if messages and messages[0]['role'] == 'system':
+        system = [{"text":messages[0]['content'][0]["text"]}]
+        messages = messages[1:]
 
     # bedrock's first turn cannot be assistant
     if messages and messages[0]['role'] == 'assistant':
@@ -194,6 +198,7 @@ async def stream_chat_response(data: ChatCompletionRequest) -> AsyncGenerator[st
                 max_tokens=data.max_tokens,
                 temperature=data.temperature,
                 history=messages,
+                system=system,
                 mcp_client=mcp_client,
                 mcp_server_ids=data.mcp_server_ids,
                 ):
@@ -291,6 +296,11 @@ async def chat_completions(request: Request,
     if messages and messages[0]['role'] == 'assistant':
         messages = messages[1:]
 
+    system = []
+    if messages and messages[0]['role'] == 'system':
+        system = [{"text":messages[0]['content'][0]["text"]}]
+        messages = messages[1:]
+
     try:
         tool_use_info = {}
         async for response in chat_client.process_query(
@@ -298,6 +308,7 @@ async def chat_completions(request: Request,
                 max_tokens=data.max_tokens,
                 temperature=data.temperature,
                 history=messages,
+                system=system,
                 mcp_client=mcp_client,
                 mcp_server_ids=data.mcp_server_ids,
                 ):
