@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()  # load environment variables from .env
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
-
+delimiter = "___"
 
 class MCPClient:
     """Manage MCP sessions.
@@ -41,7 +41,7 @@ class MCPClient:
     def _normalize_tool_name(self, tool_name):
         return tool_name.replace('-', '_').replace('/', '_').replace(':', '_')
 
-    def _get_tool_name4llm(self, server_id, tool_name, norm=True, ns_delimiter='____'):
+    def _get_tool_name4llm(self, server_id, tool_name, norm=True, ns_delimiter=delimiter):
         """Convert MCP server tool name to llm tool call"""
         # prepend server prefix namespace to support multi-mcp-server
         tool_key = server_id + ns_delimiter + tool_name
@@ -50,7 +50,7 @@ class MCPClient:
         self._tool_name_mapping_r[tool_name4llm] = tool_key
         return tool_name4llm
 
-    def _get_tool_name4mcp(self, tool_name4llm, ns_delimiter='____'):
+    def _get_tool_name4mcp(self, tool_name4llm, ns_delimiter=delimiter):
         """Convert llm tool call name to MCP server original name"""
         server_id, tool_name = "", ""
         tool_name4mcp = self._tool_name_mapping_r.get(tool_name4llm, "")

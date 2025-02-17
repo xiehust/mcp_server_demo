@@ -1,3 +1,6 @@
+"""
+FastAPI server for Bedrock Chat with MCP support
+"""
 import os
 import sys
 import json
@@ -6,7 +9,7 @@ import argparse
 import logging
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Literal
+from typing import Dict, Any, List, Optional, Literal, AsyncGenerator
 
 import boto3
 from botocore.config import Config
@@ -20,10 +23,10 @@ from fastapi import Security
 from pydantic import BaseModel, Field
 from fastapi.exceptions import RequestValidationError
 from mcp_client import MCPClient
-from chat_client import ChatClient
+from chat_client_stream import ChatClientStream
 
+chat_client = ChatClientStream()
 mcp_client = MCPClient()
-chat_client = ChatClient()
 mcp_server_list = {}
 llm_model_list = {}
 
@@ -72,7 +75,7 @@ class AddMCPServerRequest(BaseModel):
     server_desc: str
     command: Literal["npx", "uvx", "node", "python","docker"] = Field(default='npx')
     args: List[str] = []
-    env: Dict[str, str] = Field(default_factory=dict)
+    env: Optional[Dict[str, str]] = Field(default_factory=dict) 
     config_json: Dict[str,Any] = Field(default_factory=dict)
     
 
@@ -91,13 +94,17 @@ async def validation_exception_handler(request, exc):
             ).model_dump())
 
 @app.get("/v1/list/models")
-async def list_models(request: Request):
+async def list_models(request: Request,
+    auth: HTTPAuthorizationCredentials = Security(security)):
+    await get_api_key(auth)
     return JSONResponse(content={"models": [{
         "model_id": mid, 
         "model_name": name} for mid, name in llm_model_list.items()]})
 
 @app.get("/v1/list/mcp_server")
-async def list_mcp_server(request: Request):
+async def list_mcp_server(request: Request,
+    auth: HTTPAuthorizationCredentials = Security(security)):
+    await get_api_key(auth)
     return JSONResponse(content={"servers": [{
         "server_id": sid, 
         "server_name": name} for sid, name in mcp_server_list.items()]})
@@ -105,7 +112,10 @@ async def list_mcp_server(request: Request):
 @app.post("/v1/add/mcp_server")
 async def add_mcp_server(request: Request,
         data: AddMCPServerRequest,
-        background_tasks: BackgroundTasks):
+        background_tasks: BackgroundTasks,
+        auth: HTTPAuthorizationCredentials = Security(security)
+        ):
+    await get_api_key(auth)
     if data.server_id in mcp_server_list:
         return JSONResponse(content=AddMCPServerResponse(
             errno=-1,
@@ -160,23 +170,8 @@ async def add_mcp_server(request: Request,
         data={"tools": tool_conf.get("tools", {}) if tool_conf else {}}
     ).model_dump())
 
-@app.post("/v1/chat/completions")
-async def chat_completions(request: Request, 
-        data: ChatCompletionRequest, 
-        background_tasks: BackgroundTasks,
-        #auth: HTTPAuthorizationCredentials = Security(security)
-        ):
-    #await get_api_key(auth)
-
-    if not data.messages:
-        return JSONResponse(content=ChatResponse(
-            model=data.model,
-            created_at=time.time(),
-            message=Message(role="assistant", content=""),
-            done=True,
-            done_reason="load"
-        ).dict())
-
+async def stream_chat_response(data: ChatCompletionRequest) -> AsyncGenerator[str, None]:
+    """Generate streaming chat response in SSE format"""
     messages = [{
         "role": x.role,
         "content": [{"text": x.content}],
@@ -186,7 +181,110 @@ async def chat_completions(request: Request,
     if messages and messages[0]['role'] == 'assistant':
         messages = messages[1:]
 
-    logger.info(f"request body: {messages}")
+    logger.info(f"stream_chat_response data: {data}")
+
+    try:
+        current_content = ""
+        async for response in chat_client.process_query_stream(
+                model_id=data.model,
+                max_tokens=data.max_tokens,
+                history=messages,
+                mcp_client=mcp_client,
+                mcp_server_ids=data.mcp_server_ids,
+                ):
+            
+            event_data = {
+                "id": f"chat{time.time_ns()}",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": data.model,
+                "choices": [{
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": None
+                }]
+            }
+            # logger.info(f"Stream response: {response}")
+            # Handle different event types
+            if response["type"] == "message_start":
+                event_data["choices"][0]["delta"] = {"role": "assistant"}
+            
+            elif response["type"] == "block_delta":
+                if "text" in response["data"]["delta"]:
+                    text = response["data"]["delta"]["text"]
+                    current_content += text
+                    event_data["choices"][0]["delta"] = {"content": text}
+            
+            elif response["type"] == "message_stop":
+                event_data["choices"][0]["finish_reason"] = response["data"]["stopReason"]
+                if response["data"].get("tool_results"):
+                    event_data["choices"][0]["message_extras"] = {
+                        "tool_use": response["data"]["tool_results"]
+                    }
+
+            elif response["type"] == "error":
+                event_data["choices"][0]["finish_reason"] = "error"
+                event_data["choices"][0]["delta"] = {
+                    "content": f"Error: {response['data']['error']}"
+                }
+
+            # Send event
+            yield f"data: {json.dumps(event_data)}\n\n"
+
+            # Send end marker after message_stop
+            if response["type"] == "message_stop" and response["data"]["stopReason"] == 'end_turn':
+                yield "data: [DONE]\n\n"
+
+    except Exception as e:
+        logger.error(f"Stream error: {e}")
+        error_data = {
+            "id": f"error{time.time_ns()}",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": data.model,
+            "choices": [{
+                "index": 0,
+                "delta": {"content": f"Error: {str(e)}"},
+                "finish_reason": "error"
+            }]
+        }
+        yield f"data: {json.dumps(error_data)}\n\n"
+        yield "data: [DONE]\n\n"
+
+@app.post("/v1/chat/completions")
+async def chat_completions(request: Request, 
+        data: ChatCompletionRequest, 
+        background_tasks: BackgroundTasks,
+        auth: HTTPAuthorizationCredentials = Security(security)
+        ):
+    await get_api_key(auth)
+
+    if not data.messages:
+        return JSONResponse(content=ChatResponse(
+            model=data.model,
+            created_at=time.time(),
+            message=Message(role="assistant", content=""),
+            done=True,
+            done_reason="load"
+        ).model_dump())
+
+    # Handle streaming request
+    if data.stream:
+        logger.info(f"using steam")
+        return StreamingResponse(
+            stream_chat_response(data),
+            media_type="text/event-stream"
+        )
+
+    # Handle non-streaming request (existing implementation)
+    messages = [{
+        "role": x.role,
+        "content": [{"text": x.content}],
+    } for x in data.messages]
+
+    # bedrock's first turn cannot be assistant
+    if messages and messages[0]['role'] == 'assistant':
+        messages = messages[1:]
 
     try:
         tool_use_info = {}
@@ -228,8 +326,6 @@ async def chat_completions(request: Request,
             if is_tool_use or is_tool_result:
                 continue
 
-            #logger.info(tool_use_info)
-
             chat_response = ChatResponse(
                 id=f"chat{time.time_ns()}",
                 created=int(time.time()),
@@ -255,7 +351,7 @@ async def chat_completions(request: Request,
                 }
             )
             
-            return JSONResponse(content=chat_response.dict())
+            return JSONResponse(content=chat_response.model_dump())
     except Exception as e:
         logger.error(str(e))
         raise HTTPException(status_code=500, detail=str(e))

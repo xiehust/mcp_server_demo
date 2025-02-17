@@ -6,6 +6,10 @@ import html
 import logging
 import requests
 import streamlit as st
+from dotenv import load_dotenv
+load_dotenv() # load env vars from .env
+API_KEY = os.environ.get("API_KEY")
+
 
 logging.basicConfig(level=logging.INFO)
 mcp_base_url = os.environ.get('MCP_BASE_URL')
@@ -15,7 +19,9 @@ def request_list_models():
     url = mcp_base_url.rstrip('/') + '/v1/list/models'
     models = []
     try:
-        response = requests.get(url)
+        response = requests.get(url,headers={
+                        'Authorization': f'Bearer {API_KEY}'
+                    })
         data = response.json()
         models = data.get('models', [])
     except Exception as e:
@@ -26,7 +32,9 @@ def request_list_mcp_servers():
     url = mcp_base_url.rstrip('/') + '/v1/list/mcp_server'
     mcp_servers = []
     try:
-        response = requests.get(url)
+        response = requests.get(url,headers={
+                        'Authorization': f'Bearer {API_KEY}'
+                    })
         data = response.json()
         mcp_servers = data.get('servers', [])
     except Exception as e:
@@ -45,7 +53,9 @@ def request_add_mcp_server( server_id, server_name, command, args=[], env={},con
             "env": env,
             "config_json":config_json
         }
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload,headers={
+                        'Authorization': f'Bearer {API_KEY}'
+                    })
         data = response.json()
         status = data['errno'] == 0
         msg = data['msg']
@@ -54,7 +64,34 @@ def request_add_mcp_server( server_id, server_name, command, args=[], env={},con
         logging.error('request add mcp servers error: %s' % e)
     return status, msg
 
-def request_chat(messages, model_id, mcp_server_ids, max_tokens=1024):
+def process_stream_response(response):
+    """Process streaming response and yield content chunks"""
+    for line in response.iter_lines():
+        logging.info(f"line:{line}")
+        if line:
+            line = line.decode('utf-8')
+            if line.startswith('data: '):
+                data = line[6:]  # Remove 'data: ' prefix
+                if data == '[DONE]':
+                    break
+                try:
+                    json_data = json.loads(data)
+                    delta = json_data['choices'][0].get('delta', {})
+                    if 'role' in delta:
+                        continue
+                    if 'content' in delta:
+                        yield delta['content']
+                    
+                    message_extras = json_data['choices'][0].get('message_extras', {})
+                    if "tool_use" in message_extras:
+                        yield f"<tool_use>{message_extras['tool_use']}</tool_use>"
+
+                except json.JSONDecodeError:
+                    logging.error(f"Failed to parse JSON: {data}")
+                except Exception as e:
+                    logging.error(f"Error processing stream: {e}")
+
+def request_chat(messages, model_id, mcp_server_ids, stream=False, max_tokens=1024, temperature=0.1):
     url = mcp_base_url.rstrip('/') + '/v1/chat/completions'
     msg, msg_extras = 'something is wrong!', {}
     try:
@@ -63,12 +100,33 @@ def request_chat(messages, model_id, mcp_server_ids, max_tokens=1024):
             'model': model_id,
             'mcp_server_ids': mcp_server_ids,
             'max_tokens': max_tokens,
+            'stream': stream ,
+            'temperature':temperature
         }
         logging.info('request payload: %s' % payload)
-        response = requests.post(url, json=payload)
-        data = response.json()
-        msg = data['choices'][0]['message']['content']
-        msg_extras = data['choices'][0]['message_extras']
+        if stream:
+            # Make streaming request
+            response = requests.post(url, 
+                                    json=payload,
+                                    stream=True,
+                                    headers={
+                                        'Authorization': f'Bearer {API_KEY}',
+                                        'Accept': 'text/event-stream' 
+                                    })
+            if response.status_code == 200:
+                return response, {}
+            else:
+                msg = 'An error occurred when calling the Converse operation: The system encountered an unexpected error during processing. Try your request again.'
+                logging.error('request chat error: %d' % response.status_code)
+        else:
+            # Make request
+            response = requests.post(url, json=payload,headers={
+                        'Authorization': f'Bearer {API_KEY}'
+                    })
+            data = response.json()
+            msg = data['choices'][0]['message']['content']
+            msg_extras = data['choices'][0]['message_extras']
+
     except Exception as e:
         msg = 'An error occurred when calling the Converse operation: The system encountered an unexpected error during processing. Try your request again.'
         logging.error('request chat error: %s' % e)
@@ -88,6 +146,9 @@ for x in request_list_mcp_servers():
 
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "How can I help you?"}]
+
+if "enable_stream" not in st.session_state:
+    st.session_state.enable_stream = True
 
 
 # add new mcp UI and handle
@@ -200,27 +261,27 @@ def add_new_mcp_server():
                                           disabled=False)
 
 # UI
-#if 'new_mcp_server_fd_status' in st.session_state and st.session_state.new_mcp_server_fd_status:
-#    st.rerun()
-
 with st.sidebar:
-    llm_model_name = st.selectbox('Bedrock模型', 
+    llm_model_name = st.selectbox('Bedrock模型',
                                   list(st.session_state.model_names.keys()))
-    max_tokens = st.number_input('上下文长度限制', 
-                                 min_value=64, max_value=8000, value=1024)
+    max_tokens = st.number_input('上下文长度限制',
+                                 min_value=64, max_value=8000, value=2048)
+    temperature = st.number_input('temperature',
+                                 min_value=0.0, max_value=1.0, value=0.1, step=0.01)
+    st.session_state.enable_stream = st.toggle('流式输出', value=True)
     with st.expander(label='已有 MCP Servers', expanded=False):
         for i, server_name in enumerate(st.session_state.mcp_servers):
             st.checkbox(label=server_name, value=True, key=f'mcp_server_{server_name}')
-    #st.radio('是否显示 MCP 中间结果', ['Y', 'N'], key='enable_mcp_result')
     st.button("添加 MCP Server", 
               on_click=add_new_mcp_server)
 
 st.title("💬 Bedrock Chatbot with MCP")
-#st.caption("[MCP - Model Context Protocol](https://www.anthropic.com/news/model-context-protocol)")
 
+# Display chat messages
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
+# Handle user input
 if prompt := st.chat_input():
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
@@ -232,44 +293,71 @@ if prompt := st.chat_input():
         if st.session_state.get(server_key):
             mcp_server_ids.append(st.session_state.mcp_servers[server_name])
 
-    msg, msg_extras = request_chat(st.session_state.messages, model_id, 
-                       mcp_server_ids, max_tokens=max_tokens)
-
-    tool_msg = ""
-    if True or st.session_state.enable_mcp_result == 'Y':
-        if msg_extras.get('tool_use', []):
-            tool_msg = f"```\n{json.dumps(msg_extras.get('tool_use', []), indent=4,ensure_ascii=False)}\n```"
-
-    st.session_state.messages.append({"role": "assistant", "content": msg})
-
-    debug_msg = ""
-    #debug_msg += "\n{}".format(mcp_server_ids)
-
+    # Create a placeholder for the assistant's response
     with st.chat_message("assistant"):
-        thk_msg, res_msg = "", ""
-        thk_regex = r"<thinking>(.*?)</thinking>"
-        thk_m = re.search(thk_regex, msg, re.DOTALL)
-        if thk_m:
-            thk_msg = thk_m.group(1)
+        response_placeholder = st.empty()
+        full_response = ""
+        response, msg_extras = request_chat(st.session_state.messages, model_id, 
+                        mcp_server_ids, stream=st.session_state.enable_stream,
+                                         max_tokens=max_tokens,
+                                         temperature = temperature)
+        # Get streaming response
+        if st.session_state.enable_stream:
+            if isinstance(response, requests.Response):
+                # Process streaming response
+                for content in process_stream_response(response):
+                    full_response += content
+                    thk_msg, res_msg, tool_msg = "", "", ""
+                    thk_regex = r"<thinking>(.*?)</thinking>"
+                    tooluse_regex = r"<tool_use>(.*?)</tool_use>"
+                    thk_m = re.search(thk_regex, full_response, re.DOTALL)
+                    if thk_m:
+                        thk_msg = thk_m.group(1)
+                        full_response = re.sub(thk_regex, "", full_response)
 
-        res_msg = re.sub(thk_regex, "", msg)
-        #res_regex = r"<response>(.*?)</response>"
-        #res_m = re.search(res_regex, msg, re.DOTALL)
-        #if res_m:
-        #    res_msg = res_m.group(1)
-        #else:
-        #    res_msg = re.sub(thk_regex, "", msg)
+                    tool_m = re.search(tooluse_regex, full_response, re.DOTALL)
+                    if tool_m:
+                        tool_msg = tool_m.group(1)
+                        full_response = re.sub(tooluse_regex, "", full_response)
 
-        #st.write(msg)
-        st.write(res_msg)
+                    if thk_msg:
+                        with st.expander("Thinking"):
+                            st.write(thk_msg)
+                    if tool_msg:
+                        with st.expander("Tool Used"):
+                            st.json(tool_msg)
 
-        if thk_msg:
-            with st.expander("Thinking"):
-                st.write(thk_msg)
-        
-        with st.expander("Tool Used"):
-            st.write(tool_msg)
+                    # Update response in real-time
+                    response_placeholder.markdown(full_response + "▌")
+                
+                # Update final response without cursor
+                response_placeholder.markdown(full_response)
+            else:
+                # Handle error case
+                response_placeholder.markdown(response)
+                full_response = response
+        else:
+            tool_msg = ""
+            if True or st.session_state.enable_mcp_result == 'Y':
+                if msg_extras.get('tool_use', []):
+                    tool_msg = f"```\n{json.dumps(msg_extras.get('tool_use', []), indent=4,ensure_ascii=False)}\n```"
+            thk_msg, res_msg = "", ""
+            thk_regex = r"<thinking>(.*?)</thinking>"
+            thk_m = re.search(thk_regex, response, re.DOTALL)
+            if thk_m:
+                thk_msg = thk_m.group(1)
 
-        if debug_msg:
-            with st.expander("Debug"):
-                st.write(debug_msg)
+            res_msg = re.sub(thk_regex, "", response)
+            st.write(res_msg)
+
+            if thk_msg:
+                with st.expander("Thinking"):
+                    st.write(thk_msg)
+            if tool_msg:
+                with st.expander("Tool Used"):
+                    st.json(tool_msg)
+
+            full_response = response 
+
+    # Add assistant's response to chat history
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
