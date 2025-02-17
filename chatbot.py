@@ -265,7 +265,7 @@ with st.sidebar:
     llm_model_name = st.selectbox('Bedrock模型',
                                   list(st.session_state.model_names.keys()))
     max_tokens = st.number_input('上下文长度限制',
-                                 min_value=64, max_value=8000, value=2048)
+                                 min_value=64, max_value=8000, value=4000)
     temperature = st.number_input('temperature',
                                  min_value=0.0, max_value=1.0, value=0.1, step=0.01)
     st.session_state.enable_stream = st.toggle('流式输出', value=True)
@@ -305,7 +305,11 @@ if prompt := st.chat_input():
         if st.session_state.enable_stream:
             if isinstance(response, requests.Response):
                 # Process streaming response
+                tool_count = 1
+                content_block_idx = 0
                 for content in process_stream_response(response):
+                    logging.info(f"content block idx:{content_block_idx}")
+                    content_block_idx += 1
                     full_response += content
                     thk_msg, res_msg, tool_msg = "", "", ""
                     thk_regex = r"<thinking>(.*?)</thinking>"
@@ -324,8 +328,17 @@ if prompt := st.chat_input():
                         with st.expander("Thinking"):
                             st.write(thk_msg)
                     if tool_msg:
-                        with st.expander("Tool Used"):
-                            st.json(tool_msg)
+                        # with st.expander("Tool Used"):
+                        with st.container(border=True):
+                            tool_blocks = json.loads(tool_msg)
+                            for i,tool_block in enumerate(tool_blocks):
+                                if i%2 == 0:
+                                    with st.expander(f"Tool Call:{tool_count}"):
+                                        st.json(tool_block)
+                                else:
+                                    with st.expander(f"Tool Result:{tool_count}"):
+                                        st.json(tool_block)
+                                        tool_count += 1
 
                     # Update response in real-time
                     response_placeholder.markdown(full_response + "▌")

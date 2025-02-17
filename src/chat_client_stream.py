@@ -55,7 +55,7 @@ class ChatClientStream(ChatClient):
                 continue
 
     async def process_query_stream(self, query: str = "",
-            model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=10,
+            model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=10,temperature=0.1,
             history=[], mcp_client=None, mcp_server_ids=[]) -> AsyncGenerator[Dict, None]:
         """Submit user query or history messages, and get streaming response.
         
@@ -89,13 +89,15 @@ class ChatClientStream(ChatClient):
                 response = bedrock_client.converse_stream(
                     modelId=model_id,
                     messages=messages,
-                    toolConfig=tool_config if tool_config else None
+                    toolConfig=tool_config if tool_config else None,
+                    inferenceConfig={"maxTokens":max_tokens,"temperature":temperature,}
+                    
                 )
                 turn_i += 1
                 # 收集所有需要调用的工具请求
                 tool_calls = []
                 async for event in self._process_stream_response(response):
-                    # logger.info(event)
+                    logger.info(event)
                     # continue
                     yield event
                     # Handle tool use in content block start
@@ -165,7 +167,7 @@ class ChatClientStream(ChatClient):
                                 "content": tool_results_content
                             }
                             # output tool results
-                            event["data"]["tool_results"] = tool_results
+                            event["data"]["tool_results"] = [item for pair in zip(tool_calls, tool_results) for item in pair]
                             yield event
                             #append assistant message   
                             tool_use_block = [{"toolUse":tool} for tool in tool_calls]
@@ -181,7 +183,7 @@ class ChatClientStream(ChatClient):
                             logger.info("Call new turn : %s" % messages)
                             # Start new stream with tool result
                             response = bedrock_client.converse_stream(
-                                modelId=model_id,
+                                modelId=model_id,   
                                 messages=messages,
                                 toolConfig=tool_config
                             )

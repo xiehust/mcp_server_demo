@@ -188,6 +188,7 @@ async def stream_chat_response(data: ChatCompletionRequest) -> AsyncGenerator[st
         async for response in chat_client.process_query_stream(
                 model_id=data.model,
                 max_tokens=data.max_tokens,
+                temperature=data.temperature,
                 history=messages,
                 mcp_client=mcp_client,
                 mcp_server_ids=data.mcp_server_ids,
@@ -219,7 +220,7 @@ async def stream_chat_response(data: ChatCompletionRequest) -> AsyncGenerator[st
                 event_data["choices"][0]["finish_reason"] = response["data"]["stopReason"]
                 if response["data"].get("tool_results"):
                     event_data["choices"][0]["message_extras"] = {
-                        "tool_use": response["data"]["tool_results"]
+                        "tool_use": json.dumps(response["data"]["tool_results"],ensure_ascii=False)
                     }
 
             elif response["type"] == "error":
@@ -291,6 +292,7 @@ async def chat_completions(request: Request,
         async for response in chat_client.process_query(
                 model_id=data.model,
                 max_tokens=data.max_tokens,
+                temperature=data.temperature,
                 history=messages,
                 mcp_client=mcp_client,
                 mcp_server_ids=data.mcp_server_ids,

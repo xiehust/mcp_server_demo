@@ -44,7 +44,7 @@ class ChatClient:
         return bedrock_client
     
     async def process_query(self, query: str = "", 
-            model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=10,
+            model_id="amazon.nova-lite-v1:0", max_tokens=1024, temperature=0.1,max_turns=10,
             history=[], mcp_client=None, mcp_server_ids=[]) -> Dict:
         """Submit user query or history messages, and then get the response answer.
 
@@ -70,12 +70,15 @@ class ChatClient:
             response = bedrock_client.converse(
                 modelId=model_id,
                 messages=messages,
-                toolConfig=tool_config
+                toolConfig=tool_config,
+                inferenceConfig={"maxTokens":max_tokens,"temperature":temperature,}
             )
         else:
             response = bedrock_client.converse(
                 modelId=model_id,
                 messages=messages,
+                inferenceConfig={"maxTokens":max_tokens,"temperature":temperature,}
+
             )
 
         # the response may or not request tool use
