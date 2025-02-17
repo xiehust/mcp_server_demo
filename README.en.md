@@ -143,7 +143,23 @@ Then click [Add MCP Server], fill in the following parameters in the popup menu 
 ![](docs/add_mcp_server.png)  
 The newly added item will appear in the existing MCP Server list, check it to start the MCP Server.
 
-## 5. Stop Services
+## 5. Enable Deep Research
+- Simultaneously enable websearch (refer to the EXA configuration above) and [Sequential Thinking MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking). The Sequential Thinking MCP Server is already preset in the configuration file, and after startup, you can see the server name is "cot".
+![alt text](docs/image-serverlist.png)
+- Sequential Thinking provides structured thinking processes and reflection through dynamic tool calls, prompting the model to output structured reasoning chains according to the tool's input requirements.
+- EXA Search provides both keyword and vector retrieval search for network knowledge, returning detailed content from web pages.
+- Test Questions
+```
+1. use search tool and sequential thinking to make comparison report between different agents frameworks such as autogen, langgraph, aws multi agents orchestrator
+2. use sequential thinking and search tool to make me a travel plan to visit shanghai between 3/1/2025 to 3/5/2025. I will departure from Beijing
+3. use sequential thinking to research what the key breakthroughs and future impact of deepseek r1
+4. use search tool to compare the API performance of Deepseek R1 full version provided by Volcano Engine, Ali Bailian, and Silicon Flow, including inference speed, TTFT, maximum context length, etc. Use sequential thinking tool
+```
+- Effect Preview
+![alt text](docs/image_deepresearch_1.png)
+![alt text](docs/image_deepresearch_2.png)
+
+## 6. Stop Services
 ```bash
 bash stop_all.sh
 ```

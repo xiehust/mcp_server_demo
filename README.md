@@ -174,6 +174,23 @@ read the content of rows.txt file
 
 此时在已有 MCP Server 列表中就可以看到新添加项，勾选即可启动该 MCP Server。
 
+## 开启Deep Research
+- 同时启用 websearch(参考上面的EXA配置)和 [Sequential Thinking MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)，目前已经预置了Sequential Thinking MCP Server在配置文件中, 启动后可以看到server名称是cot。  
+![alt text](docs/image-serverlist.png)
+- Sequential Thinking提供通过动态的结构化思维过程和反思，通过工具调用的促使模型按工具输入的要求进行结构化输出推理链条。
+- EXA Search 同时提供关键词和向量检索搜索网络知识，并返回页面的上的详细内容。
+- 测试问题
+```
+1. use search tool and sequential thinking to make comparison report between different agents frameworks such as autogen, langgraph, aws multi agents orchestrator
+2. use sequential thinking and search tool to make me a travel plan to visit shanghai between 3/1/2025 to 3/5/2025. I will departure from Beijing
+3. use sequential thinking to research what the key breakthroughs and future impact of deepseek r1
+4. 搜索对比火山引擎，阿里百炼，硅基流动上的对外提供的deepseek r1 满血版的API 性能对比, 包括推理速度，TTFT， 最大context长度等。使用sequential thinking 工具
+```
+- 效果一览
+![alt text](docs/image_deepresearch_1.png)
+![alt text](docs/image_deepresearch_2.png)
+
+
 
 ## 5. 停止服务
 ```bash
