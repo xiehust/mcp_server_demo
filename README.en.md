@@ -44,7 +44,7 @@ source .venv/bin/activate
 
 ### Configuration Setup
 
-Project configuration should be written in the `.env` file and include the following items (suggested to copy from `.env_dev` and modify):
+Project configuration should be written in the `.env` file and include the following items (suggested to copy from `env_dev` and modify):
 
 ```
 AWS_ACCESS_KEY_ID=<your-access-key>
@@ -54,6 +54,7 @@ LOG_DIR=./logs
 CHATBOT_SERVICE_PORT=<chatbot-ui-service-port>
 MCP_SERVICE_HOST=127.0.0.1
 MCP_SERVICE_PORT=<bedrock-mcp-service-port>
+API_KEY=<your-new-api-key>
 ```
 
 Note: This project uses **AWS Bedrock Nova** series models, so you need to register and obtain the above service access keys.
@@ -94,7 +95,19 @@ After startup, check the log `logs/start_mcp.log` for any errors, then run the t
 
 ```bash
 # Script uses Amazon Nova-lite model from Bedrock, can be changed to others
-bash tests/test_chat_api.sh
+# Use 123456 as API key by default, please change it to your actual api key
+curl http://127.0.0.1:7002/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer 123456" \
+  -d '{
+    "model": "amazon.nova-lite-v1:0",
+    "messages": [
+      {
+        "role": "user",
+        "content": "show all of tables in db"
+      }
+    ]
+  }'
 ```
 
 ### ChatBot UI Service
