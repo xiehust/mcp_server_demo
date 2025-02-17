@@ -1,5 +1,6 @@
 """
-Bedrock Chat Wrapper
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+SPDX-License-Identifier: MIT-0
 """
 import os
 import sys
@@ -44,7 +45,7 @@ class ChatClient:
         return bedrock_client
     
     async def process_query(self, query: str = "", 
-            model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=3,
+            model_id="amazon.nova-lite-v1:0", max_tokens=1024, temperature=0.1,max_turns=10,
             history=[], mcp_client=None, mcp_server_ids=[]) -> Dict:
         """Submit user query or history messages, and then get the response answer.
 
@@ -62,6 +63,7 @@ class ChatClient:
         if mcp_client is not None:
             tool_config = await mcp_client.get_tool_config(server_ids=mcp_server_ids)
 
+        # logger.info(f"tool_config: {tool_config}")
         bedrock_client = self._get_bedrock_client()
 
         # invoke bedrock llm with user query
@@ -69,12 +71,15 @@ class ChatClient:
             response = bedrock_client.converse(
                 modelId=model_id,
                 messages=messages,
-                toolConfig=tool_config
+                toolConfig=tool_config,
+                inferenceConfig={"maxTokens":max_tokens,"temperature":temperature,}
             )
         else:
             response = bedrock_client.converse(
                 modelId=model_id,
                 messages=messages,
+                inferenceConfig={"maxTokens":max_tokens,"temperature":temperature,}
+
             )
 
         # the response may or not request tool use
@@ -94,56 +99,58 @@ class ChatClient:
                 logger.info(f"Use tool turn-{turn_i}")
                 # tool call has been requested. 
                 tool_requests = response['output']['message']['content']
+
+                # 收集所有需要调用的工具请求
+                tool_calls = []
                 for tool_request in tool_requests:
                     if 'toolUse' in tool_request:
                         tool = tool_request['toolUse']
-
-                        logger.info("Requesting tool %s. Request: %s. Inputs: %s.",
-                                    tool['name'], tool['toolUseId'], tool['input'])
-
-                        # call tool via mcp server
-                        try:
-                            tool_name, tool_args = tool['name'], tool['input']
-                            result = await mcp_client.call_tool(tool_name, tool_args)
-                            #result_content = {"json": result.content} # if tool result is json format, choose this
-                            result_content = [{"text": "\n".join([x.text for x in result.content if x.type == 'text'])}]
-                            tool_result = {
-                                "toolUseId": tool['toolUseId'],
-                                "content": result_content
-                            }
-                        except Exception as err:
-                            err_msg = f"{tool['name']} tool call is failed."
-                            tool_result = {
-                                "toolUseId": tool['toolUseId'],
-                                "content": [{"text":  err_msg}],
-                                "status": 'error'
-                            }
-
-                        logger.info("Call tool result: %s" % tool_result)
-
-                        # save tool call result
-                        tool_result_message = {
-                            "role": "user",
-                            "content": [{
-                                    "toolResult": tool_result
-                            }]
+                        tool_calls.append(tool)
+                # 并行执行所有工具调用
+                async def execute_tool_call(tool):
+                    logger.info("Call tool: %s" % tool)
+                    try:
+                        tool_name, tool_args = tool['name'], tool['input']
+                        result = await mcp_client.call_tool(tool_name, tool_args)
+                        result_content = [{"text": "\n".join([x.text for x in result.content if x.type == 'text'])}]
+                        return {
+                            "toolUseId": tool['toolUseId'],
+                            "content": result_content
                         }
-                        messages.append(tool_result_message)
-                        # return tool use results
-                        yield tool_result_message
+                    except Exception as err:
+                        err_msg = f"{tool['name']} tool call is failed. error:{err}"
+                        return {
+                            "toolUseId": tool['toolUseId'],
+                            "content": [{"text": err_msg}],
+                            "status": 'error'
+                        }
+                # 使用 asyncio.gather 并行执行所有工具调用
+                tool_results = await asyncio.gather(*[execute_tool_call(tool) for tool in tool_calls])
+                # 处理所有工具调用的结果
+                tool_results_content = []
+                for tool_result in tool_results:
+                    logger.info("Call tool result: Id: %s" % (tool_result['toolUseId']) )
+                    tool_results_content.append({"toolResult": tool_result})
+                # save tool call result
+                tool_result_message = {
+                    "role": "user",
+                    "content": tool_results_content
+                }
+                messages.append(tool_result_message)
+                # return tool use results
+                yield tool_result_message
 
-                        # send the tool result to the model.
-                        response = bedrock_client.converse(
-                            modelId=model_id,
-                            messages=messages,
-                            toolConfig=tool_config,
-                        )
-                        stop_reason = response['stopReason']
-                        output_message = response['output']['message']
-                        messages.append(output_message)
-                        # return user query's answer
-                        yield output_message
-
+                # send the tool results to the model.
+                response = bedrock_client.converse(
+                    modelId=model_id,
+                    messages=messages,
+                    toolConfig=tool_config,
+                )
+                stop_reason = response['stopReason']
+                output_message = response['output']['message']
+                messages.append(output_message)
+                # return user query's answer
+                yield output_message
                 turn_i += 1
     
     async def chat_loop_cli(self, model_id="amazon.nova-lite-v1:0", mcp_client=None):
