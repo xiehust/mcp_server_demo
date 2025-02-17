@@ -303,10 +303,14 @@ if prompt := st.chat_input():
                                          temperature = temperature)
         # Get streaming response
         if st.session_state.enable_stream:
+            thinking_content = ""  # 添加变量存储累积的thinking内容
+            thinking_expander = None  # 用于存储thinking的expander对象
             if isinstance(response, requests.Response):
                 # Process streaming response
                 tool_count = 1
                 content_block_idx = 0
+                thinking_content = ""
+                thinking_expander = None
                 for content in process_stream_response(response):
                     logging.info(f"content block idx:{content_block_idx}")
                     content_block_idx += 1
@@ -318,15 +322,19 @@ if prompt := st.chat_input():
                     if thk_m:
                         thk_msg = thk_m.group(1)
                         full_response = re.sub(thk_regex, "", full_response)
+                        # 如果有新的thinking内容，追加到现有内容中
+                        if thk_msg != thinking_content:
+                            thinking_content = thk_msg  # 更新thinking内容
+                            # 如果expander不存在则创建，否则更新现有的
+                            if thinking_expander is None:
+                                thinking_expander = st.expander("Thinking")
+                            with thinking_expander:
+                                st.write(thinking_content)
 
                     tool_m = re.search(tooluse_regex, full_response, re.DOTALL)
                     if tool_m:
                         tool_msg = tool_m.group(1)
                         full_response = re.sub(tooluse_regex, "", full_response)
-
-                    if thk_msg:
-                        with st.expander("Thinking"):
-                            st.write(thk_msg)
                     if tool_msg:
                         # with st.expander("Tool Used"):
                         with st.container(border=True):
