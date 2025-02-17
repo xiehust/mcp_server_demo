@@ -44,7 +44,7 @@ source .venv/bin/activate
 
 ### 配置编辑
 
-项目配置写入 `.env` 文件，应包含以下配置项（建议拷贝 `.env_dev` 在其基础上修改）：
+项目配置写入 `.env` 文件，应包含以下配置项（建议拷贝 `env_dev` 在其基础上修改）：
 
 ```
 AWS_ACCESS_KEY_ID=<your-access-key>
@@ -54,6 +54,7 @@ LOG_DIR=./logs
 CHATBOT_SERVICE_PORT=<chatbot-ui-service-port>
 MCP_SERVICE_HOST=127.0.0.1
 MCP_SERVICE_PORT=<bedrock-mcp-service-port>
+API_KEY=<your-new-api-key>
 ```
 
 备注：该项目用到 **AWS Bedrock Nova** 系列大模型，因此需要注册并获取以上服务访问密钥。
@@ -94,7 +95,19 @@ bash start_all.sh
 
 ```bash
 # 脚本使用 Bedrock 的 Amazon Nova-lite 模型，也可更换其它
-bash tests/test_chat_api.sh
+# 默认使用123456作为API key, 请根据实际设置更改
+curl http://127.0.0.1:7002/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer 123456" \
+  -d '{
+    "model": "amazon.nova-lite-v1:0",
+    "messages": [
+      {
+        "role": "user",
+        "content": "show all of tables in db"
+      }
+    ]
+  }'
 ```
 
 - Demo 示例1: 使用Amazon Knowledge Base
