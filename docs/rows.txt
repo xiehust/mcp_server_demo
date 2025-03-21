@@ -1,3 +1,0 @@
-name,age,gender
-mick,23,M
-jim,35,F
